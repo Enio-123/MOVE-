@@ -3,11 +3,15 @@ import { activeMinutes, estimateCalories } from '../domain/activity'
 import { addDays, weekStart } from '../domain/dates'
 import { duration, fmtDateLong, fmtInt, fmtTime, km } from '../domain/format'
 import { describeMission } from '../domain/missions'
+import { estimateSteps, stepsForDay } from '../domain/steps'
 import { useApp, useDerived } from '../services/store'
 import { ActivityRow } from '../ui/ActivityRow'
 import { BarChart } from '../ui/charts'
 import { EstimateBadge, Progress, Ring, SportIcon } from '../ui/components'
 import { navigate } from '../ui/router'
+import { InstallCard } from '../ui/InstallCard'
+import { LogoMark } from '../ui/Logo'
+import { CountUp } from '../ui/motion'
 
 function greeting(h: number) {
   return h < 5 ? 'Boa noite' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'
@@ -39,6 +43,10 @@ export function Home() {
   const missions = d.missions.filter((m) => !m.done).sort((a, b) => b.value / b.target - a.value / a.target).slice(0, 3)
   const recentAch = d.achievements.filter((a) => a.unlockedAt).sort((a, b) => b.unlockedAt! - a.unlockedAt!).slice(0, 3)
   const empty = d.counted.length === 0
+  const stepLog = useApp((x) => x.stepLog)
+  const healthSteps = useApp((x) => x.healthSteps)
+  const estimated = todayActs.reduce((n, a) => n + (a.steps ?? estimateSteps(a.distanceM, a.sport) ?? 0), 0)
+  const steps = stepsForDay({ health: healthSteps[today], sensor: stepLog[today], estimated })
   const name = s.displayName.split(' ')[0]
 
   return (
@@ -48,19 +56,20 @@ export function Home() {
         <h1>{greeting(new Date().getHours())}{name ? `, ${name}` : ''}</h1>
       </header>
 
-      <section className="hero panel" aria-label="Resumo de hoje">
+      <section className="hero" aria-label="Resumo de hoje">
+        <span className="hero-mark" aria-hidden="true"><LogoMark size={260} /></span>
         <button className="hero-ring" onClick={() => navigate(`/dia/${today}`)} aria-label={`Hoje: ${Math.round(minutes)} de ${s.dailyGoalMin} minutos ativos. Abrir o dia.`}>
-          <Ring value={minutes / s.dailyGoalMin} size={132} stroke={11} label={`${Math.round(minutes)} de ${s.dailyGoalMin} minutos`}>
-            <span className="num ring-value">{Math.round(minutes)}</span>
-            <span className="tiny muted">de {s.dailyGoalMin} min</span>
+          <Ring value={minutes / s.dailyGoalMin} size={136} stroke={12} color="#ffffff" track="rgb(255 255 255 / 0.22)" doneColor="#c6ec6a" label={`${Math.round(minutes)} de ${s.dailyGoalMin} minutos`}>
+            <span className="num ring-value"><CountUp value={Math.round(minutes)} /></span>
+            <span className="tiny hero-dim">de {s.dailyGoalMin} min</span>
           </Ring>
         </button>
         <div className="hero-side">
           <a className="hero-item" href="#/calendario">
             <Flame size={22} className={d.streak.current ? 'flame on' : 'flame'} aria-hidden="true" />
             <div>
-              <div className="num hero-num">{d.streak.current} <span>{d.streak.current === 1 ? 'dia' : 'dias'}</span></div>
-              <div className="tiny muted">
+              <div className="num hero-num"><CountUp value={d.streak.current} /> <span>{d.streak.current === 1 ? 'dia' : 'dias'}</span></div>
+              <div className="tiny hero-dim">
                 {d.streak.current === 0 ? 'Sequência começa com a próxima atividade' : d.streak.pendingToday ? 'Uma atividade hoje mantém a sequência' : 'Sequência ativa hoje'}
               </div>
             </div>
@@ -70,14 +79,16 @@ export function Home() {
             <div className="grow">
               <div className="row between">
                 <span className="hero-level">{d.level.name}</span>
-                <span className="tiny muted num">{fmtInt(d.xpTotal)} XP</span>
+                <span className="tiny hero-dim num"><CountUp value={d.xpTotal} /> XP</span>
               </div>
               <Progress value={d.level.progress} label={`Progresso para o nível ${d.level.level + 1}`} />
-              <div className="tiny faint">{fmtInt(d.level.nextXp - d.xpTotal)} XP para o nível {d.level.level + 1}</div>
+              <div className="tiny hero-dim">{fmtInt(d.level.nextXp - d.xpTotal)} XP para o nível {d.level.level + 1}</div>
             </div>
           </a>
         </div>
       </section>
+
+      <InstallCard compact />
 
       {empty && (
         <section className="section first-steps" aria-labelledby="fs">
@@ -92,7 +103,7 @@ export function Home() {
             <a className="panel action-card" href="#/registrar?modo=importar">
               <Upload size={22} aria-hidden="true" />
               <strong>Importar do relógio</strong>
-              <span className="small muted">Arquivo GPX ou TCX exportado pelo app do relógio.</span>
+              <span className="small muted">Garmin, Coros, Polar, Strava ou Apple Saúde (.FIT, .GPX, .TCX, export.zip).</span>
             </a>
             <a className="panel action-card" href="#/registrar?modo=manual">
               <Timer size={22} aria-hidden="true" />
@@ -111,18 +122,24 @@ export function Home() {
         <div className="grid two md-four metric-grid">
           <a className="panel metric" href={`#/dia/${today}`}>
             <span className="metric-label"><RouteIcon size={15} aria-hidden="true" /> Distância</span>
-            <span className="num metric-value">{km(t?.distanceM ?? 0)}<small>km</small></span>
+            <span className="num metric-value"><CountUp value={(t?.distanceM ?? 0) / 1000} decimals={2} /><small>km</small></span>
             <span className="tiny faint">GPS, arquivos e registros manuais</span>
           </a>
           <a className="panel metric" href={`#/dia/${today}`}>
             <span className="metric-label"><Timer size={15} aria-hidden="true" /> Tempo ativo</span>
-            <span className="num metric-value">{Math.round(minutes)}<small>min</small></span>
+            <span className="num metric-value"><CountUp value={Math.round(minutes)} /><small>min</small></span>
             <span className="tiny faint">{t?.count ?? 0} {t?.count === 1 ? 'atividade' : 'atividades'}</span>
           </a>
           <a className="panel metric" href="#/dispositivos">
             <span className="metric-label"><Footprints size={15} aria-hidden="true" /> Passos</span>
-            <span className="metric-value metric-na">Sem fonte</span>
-            <span className="tiny faint">Passos vêm do Apple Saúde ou Health Connect (app instalável)</span>
+            {steps ? (
+              <span className="num metric-value"><CountUp value={steps.value} /></span>
+            ) : (
+              <span className="metric-value metric-na">Sem passos</span>
+            )}
+            <span className="tiny faint">
+              {steps?.source === 'health' ? 'Apple Saúde' : steps?.source === 'sensor' ? 'Sensor deste celular' : steps?.source === 'estimate' ? 'Estimativa pela distância' : 'Ligue o contador em Dispositivos'}
+            </span>
           </a>
           <a className="panel metric" href={hrActs.length ? `#/dia/${today}` : '#/dispositivos'}>
             <span className="metric-label"><HeartPulse size={15} aria-hidden="true" /> Freq. cardíaca</span>

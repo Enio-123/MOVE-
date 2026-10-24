@@ -109,9 +109,9 @@ export function CalendarPage() {
             })}
           </div>
           <div className="cal-legend tiny muted">
-            <span><i className="lg active" /> Dia ativo</span>
-            <span><i className="lg plan" /> Treino planejado</span>
-            <span><i className="lg event" /> Encontro</span>
+            <span><i className="legend-dot active" /> Dia ativo</span>
+            <span><i className="legend-dot plan" /> Treino planejado</span>
+            <span><i className="legend-dot event" /> Encontro</span>
           </div>
         </div>
 

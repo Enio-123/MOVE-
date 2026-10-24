@@ -39,6 +39,12 @@ export interface AppState {
   orphanSession: LiveSession | null
   today: string
   toasts: Celebration[]
+  /** Passos contados pelo sensor deste celular, por data local. */
+  stepLog: Record<string, number>
+  /** Passos importados do Apple Saúde, por data local. */
+  healthSteps: Record<string, number>
+  /** Comemoração em tela cheia (subida de nível ou conquista). */
+  celebration: { kind: 'level' | 'achievement'; title: string; detail: string; more: number; level?: number } | null
   /** Falha ao abrir o armazenamento local (modo privado restrito, cota, etc.). */
   storageError: string | null
 }
@@ -60,6 +66,9 @@ let state: AppState = {
   orphanSession: null,
   today: localDate(Date.now()),
   toasts: [],
+  stepLog: {},
+  healthSteps: {},
+  celebration: null,
   storageError: null,
 }
 

@@ -2,6 +2,7 @@ import { buildActivity, manualActivity } from '../domain/build'
 import { localDate } from '../domain/dates'
 import { defaultSettings } from '../domain/defaults'
 import { parseTrackFile } from '../domain/gpx'
+import { parseFit } from '../domain/fit'
 import type {
   Activity,
   AppNotification,
@@ -63,6 +64,10 @@ export function toast(t: Omit<Celebration, 'id'>) {
 
 // ---------- Inicialização ----------
 
+export function dismissCelebration() {
+  store.set({ celebration: null })
+}
+
 export async function init(customRepo?: Repository) {
   if (customRepo) repo = customRepo
   try {
@@ -80,8 +85,11 @@ export async function init(customRepo?: Repository) {
       repo.getLive(),
       repo.getKv<string[]>('seenRewards'),
     ])
-    const s = { ...defaultSettings(), ...(settings ?? {}) }
-    if (!settings) await repo.putSettings(s)
+    const [stepLog, healthSteps] = await Promise.all([repo.getKv<Record<string, number>>('stepLog'), repo.getKv<Record<string, number>>('healthSteps')])
+    let s = { ...defaultSettings(), ...(settings ?? {}) }
+    // Identidade nova: quem já usava o tema escuro padrão passa para o claro da marca (pode voltar em Ajustes).
+    if (settings && !settings.brandV) s = { ...s, theme: settings.theme === 'dark' ? 'light' : s.theme, brandV: 2 }
+    if (!settings || !settings.brandV) await repo.putSettings(s)
     store.set({
       ready: true,
       settings: s,
@@ -96,6 +104,8 @@ export async function init(customRepo?: Repository) {
       community: community ?? { following: [], blocked: [], reports: [] },
       orphanSession: live ?? null,
       today: localDate(Date.now()),
+      stepLog: stepLog ?? {},
+      healthSteps: healthSteps ?? {},
     })
     seenRewards = new Set(seen ?? getDerived().xp.map((e) => e.key))
     if (!seen) await repo.putKv('seenRewards', [...seenRewards])
@@ -140,9 +150,10 @@ function afterChange() {
     void repo.putKv('seenRewards', [...seenRewards])
     const total = fresh.reduce((s, e) => s + e.amount, 0)
     toast({ kind: 'xp', title: `+${total} XP`, detail: fresh.length === 1 ? fresh[0].label : `${fresh.length} recompensas` })
+    const unlocked: string[] = []
     for (const e of fresh) {
       if (e.kind === 'achievement') {
-        toast({ kind: 'achievement', title: 'Conquista desbloqueada', detail: e.label.replace('Conquista: ', '') })
+        unlocked.push(e.label.replace('Conquista: ', ''))
         void notify(`n:${e.key}`, 'achievement', 'Conquista desbloqueada', e.label.replace('Conquista: ', ''), '#/conquistas')
       } else if (e.kind === 'mission') {
         void notify(`n:${e.key}`, 'mission', 'Missão concluída', `${e.label.replace('Missão: ', '')} · +${e.amount} XP`, '#/missoes')
@@ -150,9 +161,12 @@ function afterChange() {
         void notify(`n:${e.key}`, 'xp', `+${e.amount} XP`, e.label, '#/perfil')
       }
     }
+    if (unlocked.length && d.level.level <= prevLevel) {
+      store.set({ celebration: { kind: 'achievement', title: unlocked[0], detail: 'Conquista desbloqueada', more: unlocked.length - 1 } })
+    }
   }
   if (d.level.level > prevLevel) {
-    toast({ kind: 'level', title: `Nível ${d.level.level}`, detail: d.level.name })
+    store.set({ celebration: { kind: 'level', title: d.level.name, detail: `Você chegou ao nível ${d.level.level}`, more: 0, level: d.level.level } })
     void notify(`n:level:${d.level.level}`, 'xp', `Você chegou ao nível ${d.level.level}`, d.level.name, '#/perfil')
   }
   levelCache = d.level.level
@@ -240,7 +254,7 @@ export async function updateSettings(patch: Partial<Settings>) {
 
 // ---------- Atividades ----------
 
-export async function saveRecorded(session: LiveSession, meta: { title: string; description: string; privacy: Activity['privacy']; photos: Blob[] }) {
+export async function saveRecorded(session: LiveSession, meta: { title: string; description: string; privacy: Activity['privacy']; photos: Blob[]; steps?: number | null }) {
   const now = Date.now()
   const a = buildActivity(
     {
@@ -251,6 +265,7 @@ export async function saveRecorded(session: LiveSession, meta: { title: string; 
     true,
   )
   a.description = meta.description
+  if (meta.steps) a.steps = meta.steps
   a.photoIds = await storePhotos(meta.photos)
   if (session.points.length > 1) await repo.putTrack({ activityId: a.id, points: session.points })
   await save('activities', a)
@@ -307,6 +322,82 @@ export async function importTrack(fileName: string, text: string, sportOverride?
   await repo.putTrack({ activityId: a.id, points: pts })
   await save('activities', a)
   return { ok: true, activity: a }
+}
+
+/** Importa um arquivo .FIT de relógio ou ciclocomputador. */
+export async function importFitFile(fileName: string, buf: ArrayBuffer, sportOverride?: Sport): Promise<ImportResult> {
+  let parsed: ReturnType<typeof parseFit>
+  try {
+    parsed = parseFit(buf)
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : 'Arquivo FIT inválido.' }
+  }
+  if (parsed.points.length < 2) return { ok: false, reason: 'O arquivo FIT não tem trajeto com GPS (atividade em ambiente fechado ou relógio sem GPS).' }
+  const externalId = `file:${parsed.fingerprint}`
+  if (store.get().activities.some((a) => a.externalId === externalId)) return { ok: false, reason: 'Esta atividade já foi importada antes.' }
+  const pts = parsed.points
+  const a = buildActivity(
+    {
+      id: uid(), sport: sportOverride ?? parsed.sport ?? 'walk', source: 'import', status: 'completed',
+      startedAt: pts[0].t, endedAt: pts[pts.length - 1].t, pausedMs: 0, points: pts, privacy: store.get().settings.defaultPrivacy,
+      title: fileName.replace(/\.fit$/i, ''), externalId, now: Date.now(),
+    },
+    false,
+  )
+  await repo.putTrack({ activityId: a.id, points: pts })
+  await save('activities', a)
+  return { ok: true, activity: a }
+}
+
+export interface HealthImportSummary {
+  added: number
+  repeated: number
+  skipped: number
+  stepDays: number
+}
+
+/** Importa treinos e passos da exportação do Apple Saúde (lida no aparelho, nada é enviado). */
+export async function importAppleHealth(file: File, onProgress?: (f: number) => void): Promise<HealthImportSummary> {
+  const { readAppleHealth } = await import('./healthImport')
+  const r = await readAppleHealth(file, onProgress)
+  const s = store.get()
+  const existing = new Set(s.activities.map((a) => a.externalId))
+  const now = Date.now()
+  const fresh: Activity[] = []
+  let repeated = 0
+  for (const w of r.workouts) {
+    const externalId = `health:${w.startedAt}:${w.sport}`
+    if (existing.has(externalId)) { repeated++; continue }
+    const base = buildActivity(
+      { id: uid(), sport: w.sport, source: 'health', status: 'completed', startedAt: w.startedAt, endedAt: w.endedAt, pausedMs: Math.max(0, w.endedAt - w.startedAt - w.durationS * 1000), points: [], privacy: s.settings.defaultPrivacy, externalId, now },
+      true,
+    )
+    fresh.push({ ...base, distanceM: w.distanceM ?? 0, movingS: Math.round(w.durationS), description: `Importado do Apple Saúde (${w.sourceName}).`, hasTrack: false })
+  }
+  if (fresh.length) {
+    await repo.putMany('activities', fresh)
+    store.set((st) => ({ activities: [...st.activities, ...fresh] }))
+  }
+  const healthSteps = { ...s.healthSteps, ...r.steps }
+  store.set({ healthSteps })
+  await repo.putKv('healthSteps', healthSteps)
+  afterChange()
+  return { added: fresh.length, repeated, skipped: r.skippedWorkouts, stepDays: Object.keys(r.steps).length }
+}
+
+/** Remove tudo o que veio do Apple Saúde (treinos e passos). */
+export async function removeHealthData() {
+  const ids = store.get().activities.filter((a) => a.source === 'health').map((a) => a.id)
+  for (const id of ids) await repo.remove('activities', id)
+  store.set((st) => ({ activities: st.activities.filter((a) => a.source !== 'health'), healthSteps: {} }))
+  await repo.putKv('healthSteps', {})
+  afterChange()
+}
+
+/** Apaga os passos contados pelo sensor deste celular. */
+export async function clearStepLog() {
+  store.set({ stepLog: {} })
+  await repo.putKv('stepLog', {})
 }
 
 export async function updateActivity(id: string, patch: Partial<Pick<Activity, 'title' | 'description' | 'privacy' | 'sport' | 'duplicateOf'>>) {
@@ -405,6 +496,8 @@ export async function exportAll(): Promise<Blob> {
     planned: s.planned,
     posts: s.posts.filter((p) => p.origin !== 'demo'),
     community: s.community,
+    stepLog: s.stepLog,
+    healthSteps: s.healthSteps,
   }
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
 }
@@ -417,6 +510,8 @@ export async function importBackup(text: string): Promise<string> {
   for (const t of data.tracks ?? []) await repo.putTrack(t)
   if (data.settings) await repo.putSettings({ ...defaultSettings(), ...data.settings, introSeen: true, onboarded: true })
   if (data.community) await repo.putCommunity(data.community)
+  if (data.stepLog) await repo.putKv('stepLog', data.stepLog)
+  if (data.healthSteps) await repo.putKv('healthSteps', data.healthSteps)
   await repo.putKv('seenRewards', null)
   const count = Array.isArray(data.activities) ? data.activities.length : 0
   await init()

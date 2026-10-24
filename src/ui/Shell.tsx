@@ -20,6 +20,7 @@ import { Avatar } from './Avatar'
 import { Logo } from './Logo'
 import { Sheet } from './components'
 import { useRoute } from './router'
+import { useInterfaceMotion } from './motion'
 import { Home as HomePage } from '../pages/Home'
 import { CalendarPage } from '../pages/Calendar'
 import { DayPage } from '../pages/Day'
@@ -93,6 +94,16 @@ function Page({ path, parts }: { path: string; parts: string[] }): ReactNode {
   }
 }
 
+function PageSkeleton() {
+  return (
+    <div className="stack" aria-busy="true" aria-label="Carregando">
+      <div className="skeleton" style={{ height: 34, width: '45%' }} />
+      <div className="skeleton" style={{ height: 260 }} />
+      <div className="grid two"><div className="skeleton" style={{ height: 110 }} /><div className="skeleton" style={{ height: 110 }} /></div>
+    </div>
+  )
+}
+
 export function Shell() {
   const route = useRoute()
   const [more, setMore] = useState(false)
@@ -100,6 +111,7 @@ export function Shell() {
   const path = route.path
   const current = (n: NavItem) => (n.match(path) ? 'page' : undefined)
   const recording = path.startsWith('/registrar')
+  useInterfaceMotion(path)
 
   const mobileTabs = ['#/', '#/mapa', '#/registrar', '#/calendario'].map(byHref)
   const moreActive = !mobileTabs.some((n) => n.match(path))
@@ -110,7 +122,7 @@ export function Shell() {
         Pular para o conteúdo
       </a>
       <nav className="sidebar" aria-label="Navegação principal">
-        <div className="brand"><Logo size={30} /></div>
+        <div className="brand"><Logo size={40} /></div>
         {NAV.map((n) =>
           n.href === '#/registrar' ? (
             <a key={n.href} href={n.href} className="record-link" aria-current={current(n)}>
@@ -131,7 +143,7 @@ export function Shell() {
       <div className="content">
         {!recording && (
           <header className="topbar">
-            <a href="#/" className="brand-mobile" aria-label="Início"><Logo size={26} /></a>
+            <a href="#/" className="brand-mobile" aria-label="Início"><Logo size={34} /></a>
             <div className="spacer" />
             <a className="icon-btn" href="#/notificacoes" aria-label={unread ? 'Notificações (há novas)' : 'Notificações'}>
               <Bell size={20} />
@@ -141,7 +153,7 @@ export function Shell() {
           </header>
         )}
         <main id="main" className={`main${recording ? ' main-record' : ''}`} tabIndex={-1} key={path}>
-          <Suspense fallback={<div className="page-loading" aria-busy="true">Carregando…</div>}>
+          <Suspense fallback={<PageSkeleton />}>
             <Page path={path} parts={route.parts} />
           </Suspense>
         </main>

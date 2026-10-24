@@ -89,6 +89,8 @@ export function Ring({
   children,
   label,
   color = 'var(--cyan)',
+  track = 'var(--surface-3)',
+  doneColor = 'var(--aqua)',
 }: {
   value: number
   size?: number
@@ -96,6 +98,8 @@ export function Ring({
   children?: ReactNode
   label: string
   color?: string
+  track?: string
+  doneColor?: string
 }) {
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
@@ -103,19 +107,20 @@ export function Ring({
   return (
     <div className="ring" style={{ width: size, height: size }} role="img" aria-label={label}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={stroke} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
         <circle
           cx={size / 2}
           cy={size / 2}
           r={r}
           fill="none"
-          stroke={v >= 1 ? 'var(--aqua)' : color}
+          stroke={v >= 1 ? doneColor : color}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - v)}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          style={{ transition: 'stroke-dashoffset 0.9s var(--ease)' }}
+          className="ring-arc"
+          style={{ ['--c' as string]: c }}
         />
       </svg>
       <div className="ring-center">{children}</div>
@@ -135,7 +140,7 @@ export function Progress({ value, label }: { value: number; label: string }) {
 export function Empty({ icon: I = TrendingUp, title, children, action }: { icon?: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
     <div className="empty">
-      <I className="icon" size={24} aria-hidden="true" />
+      <span className="icon" aria-hidden="true"><I size={24} /></span>
       <h3>{title}</h3>
       {children && <p>{children}</p>}
       {action}

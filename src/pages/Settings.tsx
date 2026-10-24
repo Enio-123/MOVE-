@@ -4,6 +4,7 @@ import type { NotificationKind, Privacy, Settings } from '../domain/types'
 import { exportAll, importBackup, toast, updateSettings, wipeAll } from '../services/actions'
 import { useApp } from '../services/store'
 import { download, Notice, PageHead, Segmented, Switch } from '../ui/components'
+import { InstallCard } from '../ui/InstallCard'
 import { navigate } from '../ui/router'
 import { LEVELS, PRIVACY_LABEL } from './Onboarding'
 
@@ -35,6 +36,7 @@ export function SettingsPage() {
   return (
     <div className="settings">
       <PageHead title="Ajustes e privacidade" />
+      <div style={{ marginBottom: 16 }}><InstallCard /></div>
 
       <section className="panel stack">
         <h2>Aparência e acessibilidade</h2>

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SPORTS, SPORT_LABEL } from '../domain/activity'
 import { buildActivity } from '../domain/build'
 import { haversine } from '../domain/geo'
-import { clock, duration, km, pace, speedKmh } from '../domain/format'
+import { clock, duration, km, pace, speedKmh, fmtInt } from '../domain/format'
 import { MAX_ACCURACY_M } from '../domain/track'
 import type { Privacy, Sport } from '../domain/types'
 import { activityXp } from '../domain/xp'
-import { addManual, discardLive, importTrack, saveRecorded, toast } from '../services/actions'
+import { addManual, discardLive, importTrack, importFitFile, importAppleHealth, saveRecorded, toast } from '../services/actions'
 import { keepScreenOn, locationPermission, tracker, useHeartRate, useTracker } from '../services/gps'
+import { pedometer, usePedometer } from '../services/pedometer'
 import { uid } from '../services/ids'
 import { store, useApp } from '../services/store'
 import type { LiveSession } from '../services/tracker'
@@ -151,11 +152,11 @@ function GpsStart() {
         {listening && (
           <div className="panel stack">
             <SignalLine />
-            <button className="btn accent lg block" disabled={!ready} onClick={() => tracker.start(sport, uid())}>
+            <button className="btn accent lg block" disabled={!ready} onClick={() => startRec(sport)}>
               <Play size={20} fill="currentColor" aria-hidden="true" /> Iniciar {SPORT_LABEL[sport].toLowerCase()}
             </button>
             {status === 'acquiring' && (
-              <button className="btn ghost sm" onClick={() => tracker.start(sport, uid())}>
+              <button className="btn ghost sm" onClick={() => startRec(sport)}>
                 Iniciar com sinal fraco (leituras imprecisas serão descartadas)
               </button>
             )}
@@ -280,6 +281,7 @@ function Recorder({ onFinish }: { onFinish: (s: LiveSession) => void }) {
     return () => void map.off('dragstart', off)
   }, [map])
 
+  const ped = usePedometer()
   const elapsed = tracker.elapsedMs(now) / 1000
   const cur = currentPace(s)
   const avg = stats.distanceM > 50 && stats.movingS > 0 ? stats.movingS / (stats.distanceM / 1000) : null
@@ -304,7 +306,11 @@ function Recorder({ onFinish }: { onFinish: (s: LiveSession) => void }) {
           {s.sport === 'ride' || s.sport === 'wheelchair' ? (
             <div><span className="num">{snap.lastFix?.speed != null ? speedKmh(snap.lastFix.speed) : '--'}</span><small>km/h</small></div>
           ) : (
-            <div><span className="num">{stats.splits.filter((x) => !x.partial).length}</span><small>km completos</small></div>
+            ped.status === 'on' && pedometer.recordingSteps() != null ? (
+              <div><span className="num">{fmtInt(pedometer.recordingSteps()!)}</span><small>passos</small></div>
+            ) : (
+              <div><span className="num">{stats.splits.filter((x) => !x.partial).length}</span><small>km completos</small></div>
+            )
           )}
           {hr.status === 'connected' && (
             <div><span className="num"><HeartPulse size={16} aria-hidden="true" /> {hr.bpm ?? '--'}</span><small>bpm</small></div>
@@ -367,7 +373,8 @@ function FinishForm({ session, onBack }: { session: LiveSession; onBack: () => v
   const save = async () => {
     setBusy(true)
     try {
-      const saved = await saveRecorded(session, { title, description: desc, privacy, photos })
+      const saved = await saveRecorded(session, { title, description: desc, privacy, photos, steps: pedometer.recordingSteps() })
+      pedometer.endRecording()
       navigate(`/atividade/${saved.id}`, true)
     } catch (e) {
       toast({ kind: 'error', title: 'Não foi possível salvar', detail: e instanceof Error ? e.message : String(e) })
@@ -440,6 +447,7 @@ function FinishForm({ session, onBack }: { session: LiveSession; onBack: () => v
               if (!confirm('Descartar esta atividade? O percurso gravado será apagado.')) return
               await discardLive()
               tracker.discard()
+              pedometer.endRecording()
               navigate('/', true)
             }}
           >
@@ -451,26 +459,59 @@ function FinishForm({ session, onBack }: { session: LiveSession; onBack: () => v
   )
 }
 
+/** Inicia a gravação; nas modalidades a pé, liga também o contador de passos do celular. */
+function startRec(sport: Sport) {
+  tracker.start(sport, uid())
+  if (sport === 'walk' || sport === 'run' || sport === 'hike') void pedometer.beginRecording()
+}
+
 function ImportForm() {
   const [sport, setSport] = useState<Sport | 'auto'>('auto')
   const [result, setResult] = useState<{ ok: boolean; text: string; id?: string } | null>(null)
   const [busy, setBusy] = useState(false)
-  const onFile = async (f: File | undefined) => {
-    if (!f) return
+  const [progress, setProgress] = useState<number | null>(null)
+  const onFiles = async (files: FileList | null | undefined) => {
+    if (!files?.length) return
     setBusy(true)
-    try {
-      const r = await importTrack(f.name, await f.text(), sport === 'auto' ? undefined : sport)
-      setResult(r.ok ? { ok: true, text: `“${r.activity.title}” importada: ${km(r.activity.distanceM)} km em ${duration(r.activity.movingS)}.`, id: r.activity.id } : { ok: false, text: r.reason })
-    } catch (e) {
-      setResult({ ok: false, text: `Não foi possível ler o arquivo: ${e instanceof Error ? e.message : String(e)}` })
+    setResult(null)
+    const lines: string[] = []
+    let lastId: string | undefined
+    let anyOk = false
+    for (const f of Array.from(files)) {
+      try {
+        const sp = sport === 'auto' ? undefined : sport
+        if (/\.(zip|xml)$/i.test(f.name) && !/\.(gpx|tcx)$/i.test(f.name)) {
+          setProgress(0)
+          const r = await importAppleHealth(f, setProgress)
+          setProgress(null)
+          anyOk = true
+          lines.push(`Apple Saúde: ${r.added} ${r.added === 1 ? 'treino importado' : 'treinos importados'}${r.repeated ? `, ${r.repeated} já existiam` : ''}${r.skipped ? `, ${r.skipped} de outras modalidades ignorados` : ''}; passos de ${r.stepDays} ${r.stepDays === 1 ? 'dia' : 'dias'}.`)
+          continue
+        }
+        const r = /\.fit$/i.test(f.name) ? await importFitFile(f.name, await f.arrayBuffer(), sp) : await importTrack(f.name, await f.text(), sp)
+        if (r.ok) {
+          anyOk = true
+          lastId = r.activity.id
+          lines.push(`“${r.activity.title}”: ${km(r.activity.distanceM)} km em ${duration(r.activity.movingS)}.`)
+        } else lines.push(`${f.name}: ${r.reason}`)
+      } catch (e) {
+        setProgress(null)
+        lines.push(`${f.name}: não foi possível ler (${e instanceof Error ? e.message : String(e)}).`)
+      }
     }
+    setResult({ ok: anyOk, text: lines.join(' '), id: files.length === 1 ? lastId : undefined })
     setBusy(false)
   }
   return (
     <div className="stack loose" style={{ maxWidth: 640 }}>
       <p className="muted">
-        Exporte a atividade no app do seu relógio (Garmin Connect, Coros, Polar Flow, Suunto ou Strava) como arquivo GPX ou TCX e selecione aqui. Distância, ritmo, parciais e elevação são recalculados com os mesmos critérios das gravações da Move+.
+        Traga atividades do relógio ou de outros apps. Distância, ritmo, parciais e elevação são recalculados com os mesmos critérios das gravações da Move+.
       </p>
+      <ul className="import-sources">
+        <li><strong>Garmin, Coros, Wahoo, Polar, Suunto</strong><span>Arquivo .FIT, .GPX ou .TCX exportado pelo app do relógio.</span></li>
+        <li><strong>Strava</strong><span>Na atividade: ⋯ › Exportar GPX. Ou a exportação completa da conta (pasta activities).</span></li>
+        <li><strong>Apple Saúde (iPhone e Apple Watch)</strong><span>App Saúde › foto do perfil › Exportar todos os dados de saúde. Selecione o export.zip: treinos e passos entram de uma vez.</span></li>
+      </ul>
       <label className="field" style={{ maxWidth: 320 }}>
         <span>Modalidade</span>
         <select className="input" value={sport} onChange={(e) => setSport(e.target.value as Sport | 'auto')}>
@@ -480,16 +521,17 @@ function ImportForm() {
       </label>
       <label className="dropzone">
         <Upload size={24} aria-hidden="true" />
-        <strong>{busy ? 'Importando…' : 'Selecionar arquivo GPX ou TCX'}</strong>
-        <span className="small muted">O arquivo é lido neste aparelho e não é enviado para nenhum servidor.</span>
-        <input type="file" accept=".gpx,.tcx,application/gpx+xml,application/vnd.garmin.tcx+xml" className="sr-only" disabled={busy} onChange={(e) => void onFile(e.target.files?.[0])} />
+        <strong>{busy ? (progress != null ? `Lendo dados de saúde… ${Math.round(progress * 100)}%` : 'Importando…') : 'Selecionar arquivos'}</strong>
+        <span className="small muted">.FIT, .GPX, .TCX ou export.zip do Apple Saúde. Pode escolher vários de uma vez. Tudo é lido neste aparelho, sem envio para servidor.</span>
+        {progress != null && <span className="progress" style={{ width: '100%', maxWidth: 320 }}><i style={{ width: `${progress * 100}%`, animation: 'none' }} /></span>}
+        <input type="file" multiple accept=".gpx,.tcx,.fit,.zip,.xml,application/gpx+xml,application/vnd.garmin.tcx+xml,application/zip,text/xml" className="sr-only" disabled={busy} onChange={(e) => { void onFiles(e.target.files); e.target.value = '' }} />
       </label>
       {result && (
         <Notice tone={result.ok ? 'info' : 'err'} icon={result.ok ? Check : AlertTriangle}>
           {result.text} {result.id && <a href={`#/atividade/${result.id}`}>Ver atividade</a>}
         </Notice>
       )}
-      <p className="tiny faint">Se a mesma atividade também foi gravada pelo GPS da Move+, as duas são reconhecidas como o mesmo exercício e contam uma única vez.</p>
+      <p className="tiny faint">Se a mesma atividade também foi gravada pelo GPS da Move+ ou veio de outra fonte, elas são reconhecidas como o mesmo exercício e contam uma única vez.</p>
     </div>
   )
 }

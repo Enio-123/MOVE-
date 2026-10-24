@@ -2,21 +2,33 @@
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: #03060c;
-  color: #eef3fa;
   overflow: hidden;
-  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
-  --bg: #03060c;
-  --blue: #2f6bff;
-  --cyan: #19c6f0;
-  --aqua: #19d3b2;
-  --orange: #ff7a1f;
+  background: #fbfdfe;
+  color: #0d2136;
+  transition: opacity 0.6s var(--ease-out), transform 0.6s var(--ease-out), filter 0.6s;
+  --handoff: 3.75s;
 }
 .intro.leaving {
   opacity: 0;
-  transform: scale(1.03);
+  transform: scale(1.06);
+  filter: blur(6px);
   pointer-events: none;
 }
+
+/* Fundo da arte da marca: branco com brilhos de azul-céu e verde-limão que se movem devagar. */
+.intro-bg { position: absolute; inset: 0; }
+.intro-bg i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0;
+  animation: glow-in 1.6s var(--ease-out) forwards, drift 14s ease-in-out infinite alternate;
+}
+.intro-bg .g1 { width: 80vmax; height: 60vmax; left: -35vmax; bottom: -30vmax; background: rgb(98 195 219 / 0.55); }
+.intro-bg .g2 { width: 70vmax; height: 55vmax; right: -30vmax; bottom: -30vmax; background: rgb(178 216 74 / 0.5); animation-delay: 0.2s, -4s; }
+.intro-bg .g3 { width: 40vmax; height: 40vmax; left: 30%; top: -25vmax; background: rgb(253 185 28 / 0.14); animation-delay: 0.4s, -8s; }
+@keyframes glow-in { to { opacity: 1; } }
+@keyframes drift { to { transform: translate(4vmax, -3vmax) scale(1.08); } }
 
 .intro-canvas {
   position: absolute;
@@ -24,18 +36,41 @@
   width: 100%;
   height: 100%;
   display: block;
+  animation: canvas-out 0.45s var(--ease) calc(var(--handoff) + 0.05s) forwards;
 }
+@keyframes canvas-out { to { opacity: 0; } }
 
-.intro::after {
-  /* vinheta suave para profundidade e leitura do texto */
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(120% 80% at 50% 40%, transparent 55%, rgb(0 0 0 / 0.55) 100%),
-    linear-gradient(to top, rgb(3 6 12 / 0.85) 0%, transparent 38%);
+/* Logo vetorial: assume o lugar da figura 3D e escreve "Move+" ao lado. */
+.intro-logo { position: absolute; z-index: 1; pointer-events: none; }
+.intro-logo .logo { width: 100%; height: 100%; }
+.intro-logo .logo-mark-shapes { opacity: 0; animation: fade-to 0.35s linear var(--handoff) forwards; }
+.intro-logo .lp-text {
+  clip-path: inset(0 100% 0 0);
+  animation: write 0.75s cubic-bezier(0.65, 0, 0.35, 1) calc(var(--handoff) + 0.15s) forwards;
 }
+.intro-logo .lp-plus {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0) rotate(-90deg);
+  animation: plus-in 0.6s var(--spring) calc(var(--handoff) + 0.75s) forwards;
+}
+@keyframes fade-to { to { opacity: 1; } }
+@keyframes write { to { clip-path: inset(0 0 0 0); } }
+@keyframes plus-in { to { transform: none; } }
+
+/* Versão vetorial (sem WebGL): a figura se monta peça por peça. */
+.intro.vector { --handoff: 1.4s; }
+.intro.vector .intro-logo .logo-mark-shapes { opacity: 1; animation: none; }
+.intro.vector .lp-body, .intro.vector .lp-leaf, .intro.vector .lp-head {
+  transform-box: fill-box;
+  opacity: 0;
+  animation: piece-in 0.9s var(--ease-out) forwards;
+}
+.intro.vector .lp-body { transform-origin: 50% 100%; transform: translateY(30%) rotate(-12deg); animation-delay: 0.2s; }
+.intro.vector .lp-leaf { transform-origin: 0% 100%; transform: translateX(-20%) rotate(18deg); animation-delay: 0.45s; }
+.intro.vector .lp-head { transform-origin: center; transform: translateY(-60%) scale(0.3); animation: head-in 0.8s var(--spring) 0.8s forwards; }
+@keyframes piece-in { to { opacity: 1; transform: none; } }
+@keyframes head-in { to { opacity: 1; transform: none; } }
 
 .intro-skip {
   position: absolute;
@@ -43,108 +78,66 @@
   right: 16px;
   z-index: 3;
   min-height: 40px;
-  padding: 0 14px;
-  border: 1px solid rgb(255 255 255 / 0.14);
+  padding: 0 16px;
+  border: 1px solid rgb(13 33 54 / 0.12);
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.04);
-  color: rgb(238 243 250 / 0.75);
+  background: rgb(255 255 255 / 0.6);
+  color: rgb(13 33 54 / 0.7);
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.2s, background 0.2s;
 }
-.intro-skip:hover { color: #fff; border-color: rgb(255 255 255 / 0.3); }
-
-.intro-brand-small {
-  position: absolute;
-  top: calc(20px + env(safe-area-inset-top));
-  left: 20px;
-  z-index: 3;
-  opacity: 0.7;
-}
+.intro-skip:hover { color: #0d2136; background: #fff; }
 
 .intro-copy {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(9vh + env(safe-area-inset-bottom));
+  bottom: calc(11vh + env(safe-area-inset-bottom));
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 22px;
   padding: 0 24px;
   text-align: center;
 }
 
-.intro-title {
+.intro-tagline {
   font-family: var(--font-display);
-  font-size: clamp(3rem, 12vw, 5.5rem);
-  font-weight: 700;
+  font-size: clamp(1.15rem, 4.4vw, 1.5rem);
+  font-weight: 600;
   letter-spacing: -0.01em;
-  line-height: 1;
+  color: #2a4a66;
 }
-.intro-title span {
+.intro-tagline span {
   display: inline-block;
   opacity: 0;
-  transform: translateY(0.35em);
-  filter: blur(6px);
-  animation: letter-in 0.6s var(--ease) forwards;
+  transform: translateY(12px);
+  filter: blur(4px);
+  animation: line-in 0.7s var(--ease-out) calc(var(--handoff) + 0.7s) forwards;
 }
-.intro-title .plus { color: var(--orange); margin-left: 0.04em; }
-
-@keyframes letter-in {
-  to { opacity: 1; transform: none; filter: none; }
-}
-
-.intro-tagline {
-  font-size: clamp(1rem, 3.6vw, 1.25rem);
-  color: rgb(238 243 250 / 0.78);
-  letter-spacing: 0.01em;
-  opacity: 0;
-  animation: rise 0.7s var(--ease) 4.5s forwards;
-}
+.intro-tagline span + span { animation-delay: calc(var(--handoff) + 0.9s); color: var(--brand-blue); }
+@keyframes line-in { to { opacity: 1; transform: none; filter: none; } }
 
 .intro-start {
-  margin-top: 10px;
-  min-width: 220px;
+  min-width: 240px;
   opacity: 0;
-  animation: rise 0.6s var(--ease) 4.8s forwards;
+  transform: translateY(14px) scale(0.96);
+  animation: start-in 0.7s var(--spring) calc(var(--handoff) + 1.1s) forwards;
 }
+@keyframes start-in { to { opacity: 1; transform: none; } }
 
-@keyframes rise {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: none; }
-}
-
-/* Movimento reduzido: tudo visível de imediato, sem deslocamentos. */
-.intro.still .intro-title span,
-.intro.still .intro-tagline,
-.intro.still .intro-start {
-  animation: none;
-  opacity: 1;
-  transform: none;
-  filter: none;
-}
-
-/* Alternativa sem WebGL: a rota desenha o símbolo em vetor. */
-.intro-fallback {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding-bottom: 22vh;
-  background: radial-gradient(60% 50% at 50% 38%, #0c1d3d 0%, #03060c 70%);
-}
-.fb-route {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 2.4s var(--ease) 0.5s forwards;
-}
-.fb-dot, .fb-plus { opacity: 0; animation: rise 0.5s var(--ease) forwards; }
-.fb-dot.a { animation-delay: 0.4s; }
-.fb-dot.b { animation-delay: 2.8s; }
-.fb-plus { animation-delay: 3.4s; }
-@keyframes draw { to { stroke-dashoffset: 0; } }
-.intro.still .fb-route { animation: none; stroke-dashoffset: 0; }
-.intro.still .fb-dot, .intro.still .fb-plus { animation: none; opacity: 1; }
+/* Movimento reduzido: tudo visível de imediato. */
+.intro.still *, .intro.still .intro-bg i { animation: none !important; }
+.intro.still .intro-bg i,
+.intro.still .intro-logo .logo-mark-shapes,
+.intro.still .intro-tagline span,
+.intro.still .intro-start,
+.intro.still .lp-body, .intro.still .lp-leaf, .intro.still .lp-head { opacity: 1; transform: none; filter: none; }
+.intro.still .lp-text { clip-path: none; }
+.intro.still .lp-plus { transform: none; }
+.intro.still .intro-canvas { display: none; }

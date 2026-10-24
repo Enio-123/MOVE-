@@ -12,7 +12,8 @@ const ALL_KINDS: Record<NotificationKind, boolean> = {
 
 export function defaultSettings(now = Date.now()): Settings {
   return {
-    theme: 'dark',
+    theme: 'light',
+    brandV: 2,
     introSeen: false,
     onboarded: false,
     displayName: '',

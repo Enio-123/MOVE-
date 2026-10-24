@@ -3,6 +3,7 @@ import { updateSettings } from './services/actions'
 import { useApp } from './services/store'
 import { Shell } from './ui/Shell'
 import { Toasts } from './ui/components'
+import { CelebrationLayer } from './ui/motion'
 import { navigate, useRoute } from './ui/router'
 import { Onboarding } from './pages/Onboarding'
 import { RecoveryDialog } from './pages/RecoveryDialog'
@@ -53,7 +54,7 @@ export function App() {
     root.dataset.motion = reduced ? 'reduce' : 'full'
     root.dataset.contrast = settings.highContrast ? 'high' : 'normal'
     root.style.setProperty('--text-scale', String(settings.textScale))
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#05080f' : '#f3f6fa')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#061120' : '#f4f7fa')
   }, [settings.theme, settings.highContrast, settings.textScale, reduced, systemDark])
 
   if (!ready) return <div className="boot" aria-busy="true" aria-label="Carregando a Move+" />
@@ -85,6 +86,7 @@ export function App() {
       <Shell />
       <RecoveryDialog />
       <Toasts />
+      <CelebrationLayer />
     </>
   )
 }

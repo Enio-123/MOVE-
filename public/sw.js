@@ -2,7 +2,7 @@
 // - Navegação: rede primeiro (pega a versão nova), cache como alternativa.
 // - Arquivos do próprio app (JS, CSS, fontes, ícones): cache primeiro.
 // - Mapas e serviços externos não são guardados.
-const CACHE = 'moveplus-v1'
+const CACHE = 'moveplus-v2'
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icons/icon-192.png'])).then(() => self.skipWaiting()))

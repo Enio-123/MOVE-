@@ -1,30 +1,50 @@
 import { useEffect, useRef, useState } from 'react'
-import { LogoMark, MARK_PATH } from '../ui/Logo'
-import { detectTier, IntroScene, webglAvailable } from './scene'
+import { Logo } from '../ui/Logo'
+import { LOGO_VIEWBOX } from '../ui/brand'
+import { detectTier, HANDOFF_AT, IntroScene, webglAvailable } from './scene'
 import './intro.css'
 
+type Rect = { x: number; y: number; w: number; h: number }
+
+/** Mesmo enquadramento final da cena 3D, para a versão vetorial e o primeiro quadro. */
+function defaultRect(): Rect {
+  const vw = innerWidth
+  const vh = innerHeight
+  const w = Math.min(vw * 0.78, ((vh * 0.26) * LOGO_VIEWBOX.w) / LOGO_VIEWBOX.h)
+  const h = (w * LOGO_VIEWBOX.h) / LOGO_VIEWBOX.w
+  return { x: (vw - w) / 2, y: vh / 2 - vh * 0.12 - h / 2, w, h }
+}
+
 /**
- * Introdução cinematográfica (≈5 s). Geometria, materiais, luzes e câmera reais em Three.js.
- * Sem WebGL, mostra uma alternativa vetorial animada. Nenhum som é reproduzido.
+ * Introdução (≈5 s). Três rotas de movimento (azul, verde e laranja) cruzam o espaço em 3D,
+ * se transformam na figura do logo oficial e entregam a cena ao logo vetorial idêntico,
+ * quando "Move+" se escreve ao lado. Sem WebGL, a mesma ideia em vetor. Sem som.
  */
 export function Intro({ reducedMotion, onDone }: { reducedMotion: boolean; onDone: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [mode] = useState<'webgl' | 'fallback'>(() => (webglAvailable() ? 'webgl' : 'fallback'))
-  const [leaving, setLeaving] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [rect, setRect] = useState<Rect>(defaultRect)
   const startRef = useRef<HTMLButtonElement>(null)
+  const fallback = mode === 'fallback' || failed
 
   useEffect(() => {
-    if (mode !== 'webgl' || !canvas.current) return
+    if (fallback) {
+      const on = () => setRect(defaultRect())
+      addEventListener('resize', on)
+      return () => removeEventListener('resize', on)
+    }
+    if (!canvas.current) return
     let scene: IntroScene | null = null
     try {
-      scene = new IntroScene({ canvas: canvas.current, tier: detectTier(), reducedMotion, markPath: MARK_PATH })
+      scene = new IntroScene({ canvas: canvas.current, tier: detectTier(), reducedMotion, onLayout: setRect })
       scene.play()
     } catch {
       setFailed(true)
     }
     return () => scene?.dispose()
-  }, [mode, reducedMotion])
+  }, [fallback, reducedMotion])
 
   useEffect(() => {
     const t = setTimeout(() => startRef.current?.focus({ preventScroll: true }), reducedMotion ? 50 : 4900)
@@ -34,54 +54,40 @@ export function Intro({ reducedMotion, onDone }: { reducedMotion: boolean; onDon
   const finish = () => {
     if (leaving) return
     setLeaving(true)
-    setTimeout(onDone, reducedMotion ? 10 : 520)
+    setTimeout(onDone, reducedMotion ? 10 : 600)
   }
 
-  const fallback = mode === 'fallback' || failed
   return (
-    <div className={`intro${leaving ? ' leaving' : ''}${reducedMotion ? ' still' : ''}`} role="dialog" aria-modal="true" aria-label="Introdução da Move+">
-      {fallback ? (
-        <div className="intro-fallback" aria-hidden="true">
-          <svg viewBox="0 0 48 48" width="200" height="200">
-            <defs>
-              <linearGradient id="fb-g" x1="6" y1="40" x2="42" y2="10" gradientUnits="userSpaceOnUse">
-                <stop offset="0" stopColor="#2f6bff" />
-                <stop offset="0.55" stopColor="#19c6f0" />
-                <stop offset="1" stopColor="#19d3b2" />
-              </linearGradient>
-            </defs>
-            <path className="fb-route" d={MARK_PATH} pathLength={1} fill="none" stroke="url(#fb-g)" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
-            <circle className="fb-dot a" cx="9" cy="37" r="2.6" fill="#03060c" stroke="#2f6bff" strokeWidth="1.8" />
-            <circle className="fb-dot b" cx="39" cy="37" r="2.6" fill="#19d3b2" />
-            <path className="fb-plus" d="M42 4.5 v8 M38 8.5 h8" stroke="#ff7a1f" strokeWidth="2.6" strokeLinecap="round" />
-          </svg>
-        </div>
-      ) : (
-        <canvas ref={canvas} className="intro-canvas" aria-hidden="true" />
-      )}
+    <div
+      className={`intro${leaving ? ' leaving' : ''}${reducedMotion ? ' still' : ''}${fallback ? ' vector' : ''}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Introdução da Move+"
+      style={{ ['--handoff' as string]: `${HANDOFF_AT}s` }}
+    >
+      <div className="intro-bg" aria-hidden="true">
+        <i className="g1" />
+        <i className="g2" />
+        <i className="g3" />
+      </div>
+      {!fallback && <canvas ref={canvas} className="intro-canvas" aria-hidden="true" />}
+
+      <div className="intro-logo" style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
+        <Logo size={rect.h} />
+      </div>
 
       <button className="intro-skip" onClick={finish}>
         Pular introdução
       </button>
 
       <div className="intro-copy">
-        <h1 className="intro-title" aria-label="Move+">
-          {'Move'.split('').map((c, i) => (
-            <span key={i} style={{ animationDelay: `${4.05 + i * 0.07}s` }} aria-hidden="true">
-              {c}
-            </span>
-          ))}
-          <span className="plus" style={{ animationDelay: '4.38s' }} aria-hidden="true">
-            +
-          </span>
-        </h1>
-        <p className="intro-tagline">Seu movimento. Sua evolução.</p>
-        <button ref={startRef} className="btn accent lg intro-start" onClick={finish}>
+        <h1 className="sr-only">Move+</h1>
+        <p className="intro-tagline">
+          <span>Seu movimento.</span> <span>Sua evolução.</span>
+        </p>
+        <button ref={startRef} className="btn primary lg intro-start" onClick={finish}>
           Começar
         </button>
-      </div>
-      <div className="intro-brand-small" aria-hidden="true">
-        <LogoMark size={22} />
       </div>
     </div>
   )

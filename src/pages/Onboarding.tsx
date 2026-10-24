@@ -51,7 +51,7 @@ export function Onboarding() {
     <div className="onboarding">
       <div className="onb-card">
         <div className="row between">
-          <Logo size={28} />
+          <Logo size={44} />
           <span className="small faint">
             Etapa {step + 1} de {steps.length}
           </span>
@@ -158,7 +158,7 @@ export function Onboarding() {
             <ul className="perm-list">
               <li><MapPin size={20} aria-hidden="true" /><div><strong>Localização</strong><span>Usada para gravar o percurso e mostrar você no mapa. Pedida quando você ativar o GPS.</span></div></li>
               <li><CalendarDays size={20} aria-hidden="true" /><div><strong>Calendário</strong><span>A Move+ tem calendário próprio. Para levar encontros ao calendário do celular, você exporta um arquivo. Seus eventos pessoais nunca são lidos.</span></div></li>
-              <li><Watch size={20} aria-hidden="true" /><div><strong>Relógios e saúde</strong><span>Opcionais, em Dispositivos. Monitores cardíacos Bluetooth funcionam no navegador; Apple Saúde e Health Connect exigem o app instalável.</span></div></li>
+              <li><Watch size={20} aria-hidden="true" /><div><strong>Relógios e saúde</strong><span>Opcionais, em Dispositivos: contador de passos do celular, monitor cardíaco Bluetooth, arquivos de relógio e a exportação do Apple Saúde.</span></div></li>
               <li><HardDrive size={20} aria-hidden="true" /><div><strong>Seus dados</strong><span>Nesta versão ficam apenas neste aparelho. Você pode exportar ou apagar tudo quando quiser.</span></div></li>
             </ul>
             <label className="field">

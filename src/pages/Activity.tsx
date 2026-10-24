@@ -9,7 +9,8 @@ import { addPhotos, deleteActivity, removePhoto, repo, toast, updateActivity } f
 import { useApp, useDerived } from '../services/store'
 import { usePhotoUrl } from '../ui/Avatar'
 import { Sparkline } from '../ui/charts'
-import { download, EstimateBadge, Notice, Sheet, SourceBadge, SportIcon } from '../ui/components'
+import { download, EstimateBadge, Notice, Sheet, SourceBadge, SportIcon, Switch } from '../ui/components'
+import { renderShareCard } from '../ui/shareCard'
 import { pin, ROUTE_STYLE, useLeaflet } from '../ui/map'
 import { back, navigate } from '../ui/router'
 import { PRIVACY_LABEL } from './Onboarding'
@@ -20,6 +21,7 @@ export default function ActivityPage({ id }: { id: string }) {
   const d = useDerived()
   const [track, setTrack] = useState<TrackPoint[] | null>(null)
   const [editing, setEditing] = useState(false)
+  const [sharing, setSharing] = useState(false)
 
   useEffect(() => {
     if (a?.hasTrack) void repo.getTrack(a.id).then((t) => setTrack(t?.points ?? []))
@@ -41,27 +43,18 @@ export default function ActivityPage({ id }: { id: string }) {
   const p = avgPace(a)
   const altValues = track?.filter((x) => typeof x.alt === 'number').map((x) => x.alt as number) ?? []
 
-  const share = async () => {
-    const text = `${a.title}: ${km(a.distanceM)} km em ${clock(a.source === 'manual' ? a.elapsedS : a.movingS)}${p ? `, ritmo ${pace(p)}/km` : ''}. Registrado na Move+.`
-    if (a.privacy === 'private' && !confirm('Esta atividade está marcada como privada. Compartilhar o resumo mesmo assim?')) return
-    try {
-      if (navigator.share) await navigator.share({ title: a.title, text })
-      else {
-        await navigator.clipboard.writeText(text)
-        toast({ kind: 'info', title: 'Resumo copiado', detail: 'Cole onde quiser compartilhar.' })
-      }
-    } catch {
-      /* compartilhamento cancelado */
-    }
+  const shareText = `${a.title}: ${km(a.distanceM)} km em ${clock(a.source === 'manual' ? a.elapsedS : a.movingS)}${p ? `, ritmo ${pace(p)}/km` : ''}. Registrado na Move+.`
+  const share = () => {
+    if (a.privacy === 'private' && !confirm('Esta atividade está marcada como privada. Compartilhar mesmo assim?')) return
+    setSharing(true)
   }
-
   return (
     <div className="activity-page">
       <div className="row between" style={{ marginBottom: 12 }}>
         <button className="btn ghost sm" onClick={() => back('/historico')}><ArrowLeft size={16} aria-hidden="true" /> Voltar</button>
         <div className="row" style={{ gap: 4 }}>
           <button className="icon-btn" onClick={() => setEditing(true)} aria-label="Editar"><Pencil size={18} /></button>
-          <button className="icon-btn" onClick={() => void share()} aria-label="Compartilhar resumo"><Share2 size={18} /></button>
+          <button className="icon-btn" onClick={share} aria-label="Compartilhar"><Share2 size={18} /></button>
           {track && track.length > 1 && (
             <button className="icon-btn" aria-label="Exportar GPX" onClick={() => download(`${a.title.replace(/[^\w\- ]+/g, '').trim() || 'atividade'}.gpx`, new Blob([toGpx(a, track)], { type: 'application/gpx+xml' }))}>
               <Download size={18} />
@@ -151,6 +144,7 @@ export default function ActivityPage({ id }: { id: string }) {
         </div>
       </div>
       {editing && <EditSheet a={a} onClose={() => setEditing(false)} />}
+      {sharing && <ShareSheet activity={a} track={track} text={shareText} onClose={() => setSharing(false)} />}
     </div>
   )
 }
@@ -237,6 +231,50 @@ function EditSheet({ a, onClose }: { a: Activity; onClose: () => void }) {
         </label>
         <button className="btn primary" type="submit">Salvar alterações</button>
       </form>
+    </Sheet>
+  )
+}
+
+function ShareSheet({ activity, track, text, onClose }: { activity: Activity; track: TrackPoint[] | null; text: string; onClose: () => void }) {
+  const [withRoute, setWithRoute] = useState(activity.hasTrack)
+  const [img, setImg] = useState<{ blob: Blob; url: string } | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let url = ''
+    let alive = true
+    setImg(null)
+    void renderShareCard(activity, track, withRoute)
+      .then((blob) => { if (!alive) return; url = URL.createObjectURL(blob); setImg({ blob, url }) })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
+    return () => { alive = false; if (url) URL.revokeObjectURL(url) }
+  }, [activity, track, withRoute])
+  const name = `${activity.title.replace(/[^\w\- ]+/g, '').trim() || 'atividade'}-moveplus.png`
+  const shareImage = async () => {
+    if (!img) return
+    const file = new File([img.blob], name, { type: 'image/png' })
+    try {
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: activity.title, text })
+      else download(name, img.blob)
+    } catch { /* cancelado */ }
+  }
+  const shareText = async () => {
+    try {
+      if (navigator.share) await navigator.share({ title: activity.title, text })
+      else { await navigator.clipboard.writeText(text); toast({ kind: 'info', title: 'Resumo copiado' }) }
+    } catch { /* cancelado */ }
+  }
+  return (
+    <Sheet title="Compartilhar" onClose={onClose}>
+      <div className="stack">
+        <div className="share-preview">{img ? <img src={img.url} alt="Prévia da imagem de compartilhamento" /> : <div className="skeleton" style={{ aspectRatio: '4 / 5' }} />}</div>
+        {err && <p className="error-text">{err}</p>}
+        {activity.hasTrack && <Switch checked={withRoute} onChange={setWithRoute} label="Mostrar o desenho do trajeto" description="O traçado pode indicar onde você esteve. Desligue para mostrar só os números." />}
+        <button className="btn primary block" disabled={!img} onClick={() => void shareImage()}><Share2 size={16} aria-hidden="true" /> Compartilhar imagem</button>
+        <div className="row">
+          <button className="btn grow" disabled={!img} onClick={() => img && download(name, img.blob)}><Download size={16} aria-hidden="true" /> Baixar</button>
+          <button className="btn grow" onClick={() => void shareText()}>Só o texto</button>
+        </div>
+      </div>
     </Sheet>
   )
 }

@@ -74,6 +74,8 @@ export interface Activity {
   /** Se esta atividade representa o mesmo exercício que outra, aponta para a principal. */
   duplicateOf: string | null
   hasTrack: boolean
+  /** Passos contados pelo sensor do celular durante a gravação, ou informados pela plataforma de saúde. */
+  steps?: number | null
   createdAt: number
   updatedAt: number
 }
@@ -91,6 +93,8 @@ export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced'
 
 export interface Settings {
   theme: 'dark' | 'light' | 'system'
+  /** Versão da identidade visual aplicada (2 = logo oficial, tema claro padrão). */
+  brandV?: number
   introSeen: boolean
   onboarded: boolean
   displayName: string

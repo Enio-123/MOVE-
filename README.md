@@ -13,7 +13,7 @@ Requer Node.js 20 ou mais novo.
 ```bash
 npm install
 npm run dev        # servidor de desenvolvimento em http://localhost:5173
-npm test           # 43 testes das regras críticas
+npm test           # 52 testes das regras críticas
 npm run build      # gera a pasta dist/
 npm run preview    # serve a build em http://localhost:4173
 ```
@@ -48,9 +48,14 @@ Nenhuma chave ou credencial está no código.
 
 ## O que funciona de verdade
 
-- **Introdução 3D** (Three.js): escultura de geometria real, linhas de rota e pontos de luz que se transformam no símbolo, nome animado, Começar e Pular. Aparece só na primeira visita (rever em Ajustes). Sem WebGL ou com movimento reduzido, usa uma versão em SVG. Reduz a qualidade sozinha em aparelhos fracos.
+- **Introdução 3D** (Three.js): três fitas de luz com as cores da marca percorrem trajetos e se transformam na logo oficial em 3D, que passa para a logo vetorial enquanto o nome é escrito. Começar e Pular. Aparece só na primeira visita (rever em Ajustes). Sem WebGL ou com movimento reduzido, usa uma versão em SVG. Reduz a qualidade sozinha em aparelhos fracos.
 - **Gravação com GPS**: caminhada, corrida, trilha, cadeira de rodas e pedalada. Tempo, distância, ritmo, velocidade, mapa ao vivo, pausa, retomada, parciais por km, tempo em movimento e elevação quando o aparelho informa altitude. Pontos imprecisos e saltos impossíveis são descartados. A sessão é salva a cada ponto e pode ser recuperada após recarregar ou fechar o app.
-- **Importação GPX/TCX**, registro manual, edição e exclusão com recálculo de tudo.
+- **Importação .FIT, GPX e TCX** (vários arquivos de uma vez, inclusive .zip do Strava), registro manual, edição e exclusão com recálculo de tudo.
+- **Apple Saúde e Apple Watch**: importação do `export.zip` do iPhone, lida no aparelho. Entram treinos e os passos diários, sem contar em dobro iPhone e relógio.
+- **Contador de passos** pelo acelerômetro do celular com o app aberto; liga sozinho nas gravações a pé. Passos do dia: Apple Saúde, depois sensor, depois estimativa pela distância (sempre identificada).
+- **Imagem para compartilhar** cada atividade (1080×1350, com o desenho do trajeto e a logo), gerada no próprio aparelho.
+- **Instalar como app**: botão de instalação (Chrome, Edge, Android) e instruções para o iPhone.
+- **Interface com animações**: indicadores que deslizam entre abas, efeito de toque, elementos que aparecem na rolagem, números que contam, comemoração de nível e conquista. Respeita o movimento reduzido.
 - **Sequência, XP, níveis, missões e conquistas** calculados a partir dos registros, com regras visíveis no app, limites diários e sem XP duplicado. Atividades sobrepostas (ex.: GPS e arquivo do relógio do mesmo treino) contam uma vez só.
 - **Mapa** OpenStreetMap: busca de lugares (Nominatim), planejamento de rota a pé, rotas e pontos de encontro salvos.
 - **Calendário** com planejamento, encontros, dias ativos, histórico de sequências e exportação `.ics`.
@@ -64,11 +69,10 @@ Nenhuma chave ou credencial está no código.
 ## O que depende de configuração externa ou de app nativo
 
 - **Comunidade online** (perfis reais, seguir, curtidas e comentários entre pessoas, convites, desafios): precisa de backend. O esquema proposto está em `supabase/schema.sql`, com regras de acesso por linha e XP calculado só no servidor. Basta criar um projeto Supabase e implementar um `Repository` remoto em `src/services/`.
-- **Apple Saúde** e **Health Connect** (passos, frequência cardíaca do relógio): não são acessíveis por sites. Exigem o app instalável (por exemplo React Native ou Capacitor) reaproveitando `src/domain`.
-- **Garmin, Strava, Polar, Fitbit e outros**: exigem cadastro de desenvolvedor no fabricante e um servidor para OAuth. Até lá, use a exportação GPX/TCX.
+- **Apple Saúde em tempo real** e **Health Connect**: leitura contínua não é acessível por sites. Exige o app instalável (por exemplo React Native ou Capacitor) reaproveitando `src/domain`. Hoje: exportação do Apple Saúde e contador de passos.
+- **Garmin, Strava, Polar, Fitbit e outros**: exigem cadastro de desenvolvedor no fabricante e um servidor para OAuth. Até lá, use a exportação .FIT, GPX ou TCX.
 - **GPS em segundo plano**: navegadores podem pausar o GPS com a tela bloqueada. O app mantém a tela ligada quando possível e avisa sobre intervalos sem sinal. Gravação contínua em segundo plano exige o app instalável.
 - **Notificações com o app fechado**: exigem push com servidor.
-- **Logo**: a marca atual é provisória até a equipe enviar o logo oficial (`src/ui/Logo.tsx`).
 
 ## Estrutura
 
@@ -77,7 +81,7 @@ src/domain/    regras puras e testadas (GPS, datas, sequência, XP, missões, co
 src/services/  armazenamento (IndexedDB), estado, ações, GPS, Bluetooth, mapas, demonstração
 src/intro/     introdução 3D
 src/pages/     telas
-src/ui/        componentes, navegação, mapa, gráficos, logo
+src/ui/        componentes, navegação, mapa, gráficos, animações, logo oficial vetorizada (brand.ts)
 supabase/      esquema proposto para o backend
 scripts/       ícones e testes no navegador
 ```
